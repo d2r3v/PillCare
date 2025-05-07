@@ -2,15 +2,15 @@ import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras import layers, models
-import os
 import matplotlib.pyplot as plt
-
+import os
 
 # --- Paths ---
 DATASET_DIR = "pill_dataset_split"
 IMG_SIZE = (224, 224)
 BATCH_SIZE = 16
 EPOCHS = 10
+FINE_TUNE_EPOCHS = 5
 
 # --- Data Generators ---
 train_datagen = ImageDataGenerator(
@@ -47,7 +47,7 @@ test_generator = val_test_datagen.flow_from_directory(
 
 # --- Model ---
 base_model = MobileNetV2(weights="imagenet", include_top=False, input_shape=(224, 224, 3))
-base_model.trainable = False  # Freeze base
+base_model.trainable = False
 
 model = models.Sequential([
     base_model,
@@ -65,7 +65,7 @@ callbacks = [
     tf.keras.callbacks.EarlyStopping(patience=3, restore_best_weights=True)
 ]
 
-# --- Train ---
+# --- Initial Training ---
 history = model.fit(
     train_generator,
     epochs=EPOCHS,
@@ -73,32 +73,56 @@ history = model.fit(
     callbacks=callbacks
 )
 
+# --- Fine-tuning ---
+base_model.trainable = True
+for layer in base_model.layers[:-20]:
+    layer.trainable = False
+
+model.compile(
+    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+print("[🔁] Fine-tuning last 20 layers of MobileNetV2...")
+history_fine = model.fit(
+    train_generator,
+    epochs=EPOCHS + FINE_TUNE_EPOCHS,
+    initial_epoch=EPOCHS,
+    validation_data=val_generator,
+    callbacks=callbacks
+)
+
 # --- Evaluate ---
 loss, acc = model.evaluate(test_generator)
-print(f"\n Test accuracy: {acc:.4f}")
-# --- Save Model ---
+print(f"\n✅ Test accuracy: {acc:.4f}")
 
+# --- Plot Training ---
+def plot_history(histories, labels):
+    plt.figure(figsize=(12, 5))
 
-# --- Plot Accuracy ---
-plt.figure(figsize=(10, 4))
+    # Accuracy
+    plt.subplot(1, 2, 1)
+    for hist, label in zip(histories, labels):
+        plt.plot(hist.history['accuracy'], label=f'{label} Train')
+        plt.plot(hist.history['val_accuracy'], label=f'{label} Val')
+    plt.title('Accuracy Over Epochs')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.legend()
 
-plt.subplot(1, 2, 1)
-plt.plot(history.history['accuracy'], label='Train Acc')
-plt.plot(history.history['val_accuracy'], label='Val Acc')
-plt.title('Accuracy Over Epochs')
-plt.xlabel('Epoch')
-plt.ylabel('Accuracy')
-plt.legend()
+    # Loss
+    plt.subplot(1, 2, 2)
+    for hist, label in zip(histories, labels):
+        plt.plot(hist.history['loss'], label=f'{label} Train')
+        plt.plot(hist.history['val_loss'], label=f'{label} Val')
+    plt.title('Loss Over Epochs')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
 
-# --- Plot Loss ---
-plt.subplot(1, 2, 2)
-plt.plot(history.history['loss'], label='Train Loss')
-plt.plot(history.history['val_loss'], label='Val Loss')
-plt.title('Loss Over Epochs')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-plt.legend()
+    plt.tight_layout()
+    plt.savefig("training_finetuned_plots.png")
+    plt.show()
 
-plt.tight_layout()
-plt.savefig("training_plots.png")
-plt.show()
+plot_history([history, history_fine], ["Initial", "Fine-tune"])
