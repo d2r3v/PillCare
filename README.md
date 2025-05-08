@@ -1,6 +1,6 @@
 # PillCare — Intelligent Pill Identifier with Visual Recognition
 
-**PillCare** is a deep learning–powered application designed to visually identify pills based on their appearance — including shape, color, and imprint. It’s built for accessibility and safety, especially for elderly users or those managing multiple medications.
+**PillCare** is a deep learning–powered application designed to visually identify pills based on their appearance including shape, color, and imprint. It’s built for accessibility and safety, especially for elderly users or those managing multiple medications.
 
 ## Features
 
@@ -22,7 +22,7 @@
 
 ## Dataset
 
-Images extracted from the [Pillbox dataset](https://www.fda.gov/drugs/pillbox) — filtered and matched with metadata. Preprocessed images are resized to 224x224 and classified by `medicine_name`.
+Images extracted from the [Pillbox dataset](https://www.fda.gov/drugs/pillbox) filtered and matched with metadata. Preprocessed images are resized to 224x224 and classified by `medicine_name`.
 
 We currently use a small subset of 5 classes for prototype purposes:
 - diltiazem hydrochloride
