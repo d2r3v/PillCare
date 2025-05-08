@@ -84,7 +84,7 @@ model.compile(
     metrics=['accuracy']
 )
 
-print("[🔁] Fine-tuning last 20 layers of MobileNetV2...")
+print(" Fine-tuning last 20 layers of MobileNetV2...")
 history_fine = model.fit(
     train_generator,
     epochs=EPOCHS + FINE_TUNE_EPOCHS,
@@ -95,7 +95,7 @@ history_fine = model.fit(
 
 # --- Evaluate ---
 loss, acc = model.evaluate(test_generator)
-print(f"\n✅ Test accuracy: {acc:.4f}")
+print(f"\n Test accuracy: {acc:.4f}")
 
 # --- Plot Training ---
 def plot_history(histories, labels):
