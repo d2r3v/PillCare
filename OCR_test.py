@@ -35,7 +35,7 @@ def extract_imprint(image_path, show=False):
 
 # === MAIN LOOP ===
 if __name__ == "__main__":
-    print(f"📁 Reading images from: {IMAGE_DIR}")
+    print(f"Reading images from: {IMAGE_DIR}")
     image_paths = []
     for ext in EXTENSIONS:
         image_paths.extend(glob.glob(os.path.join(IMAGE_DIR, ext)))
