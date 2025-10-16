@@ -264,3 +264,9 @@ ENV/
 
 /home/d2r3v/Documents/PillCare/data/ePillID_data
 
+#Dataset
+.data/
+data/
+ocr_dataset_epillid/
+pill_dataset_split/
+

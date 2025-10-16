@@ -4,6 +4,8 @@ from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras import layers, models
 import matplotlib.pyplot as plt
 import os
+import json
+import numpy as np
 
 # --- Paths ---
 DATASET_DIR = "pill_dataset_split"
@@ -95,7 +97,37 @@ history_fine = model.fit(
 
 # --- Evaluate ---
 loss, acc = model.evaluate(test_generator)
-print(f"\n Test accuracy: {acc:.4f}")
+print(f"\n✅ Test accuracy: {acc:.4f}")
+print(f"✅ Test loss: {loss:.4f}")
+
+# --- Save Evaluation Metrics ---
+metrics = {
+    "test_accuracy": float(acc),
+    "test_loss": float(loss),
+    "num_classes": int(train_generator.num_classes),
+    "class_labels": {str(k): v for k, v in train_generator.class_indices.items()},
+    "total_training_epochs": EPOCHS + FINE_TUNE_EPOCHS,
+    "img_size": IMG_SIZE,
+    "batch_size": BATCH_SIZE
+}
+
+# Get per-class predictions for additional metrics
+test_generator.reset()
+y_pred_probs = model.predict(test_generator, verbose=1)
+y_pred = np.argmax(y_pred_probs, axis=1)
+y_true = test_generator.classes
+
+# Calculate per-class accuracy
+from sklearn.metrics import classification_report
+report = classification_report(y_true, y_pred, target_names=list(train_generator.class_indices.keys()), output_dict=True)
+metrics["classification_report"] = report
+metrics["overall_accuracy"] = float(report["accuracy"])
+
+os.makedirs("logs", exist_ok=True)
+with open("logs/training_metrics.json", "w") as f:
+    json.dump(metrics, f, indent=2)
+
+print(f"✅ Metrics saved to logs/training_metrics.json")
 
 # --- Plot Training ---
 def plot_history(histories, labels):
@@ -122,7 +154,9 @@ def plot_history(histories, labels):
     plt.legend()
 
     plt.tight_layout()
-    plt.savefig("training_finetuned_plots.png")
+    os.makedirs("plots", exist_ok=True)
+    plt.savefig("plots/training_finetuned_plots.png", dpi=300, bbox_inches='tight')
+    print(f"✅ Training plots saved to plots/training_finetuned_plots.png")
     plt.show()
 
 plot_history([history, history_fine], ["Initial", "Fine-tune"])
