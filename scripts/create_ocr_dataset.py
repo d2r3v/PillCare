@@ -86,7 +86,7 @@ def create_dataset(image_dir, metadata_path, output_dir):
 
 if __name__ == "__main__":
     # Update these paths to point to the new ePillID dataset
-    image_directory = "data/ePillID_data/classification_data/segmented_nih_pills_224"
+    image_directory = "data/ocr_dataset_epillid/images"
     metadata_file = "data/Pillbox.csv"
     output_directory = "ocr_dataset_epillid"
     

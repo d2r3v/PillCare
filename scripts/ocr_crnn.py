@@ -1,7 +1,8 @@
 import tensorflow as tf
 import numpy as np
 
-crnn_model = tf.keras.models.load_model("models/crnn_ocr_model.h5")
+def load_model(model_path):
+    return tf.keras.models.load_model(model_path)
 
 # You need to define the character list and decoding function
 CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
