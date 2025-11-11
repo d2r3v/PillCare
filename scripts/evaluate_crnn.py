@@ -25,7 +25,18 @@ from scripts.preprocess import preprocess_for_ocr
 def load_model(model_path: str = "models/crnn_epillid.h5"):
     # Import CTCLayer from ocr_crnn to ensure consistency
     from scripts.ocr_crnn import CTCLayer
-    return tf.keras.models.load_model(model_path, custom_objects={"CTCLayer": CTCLayer})
+    full_model = tf.keras.models.load_model(model_path, custom_objects={"CTCLayer": CTCLayer})
+    # Extract the prediction model (input: image, output: before CTC layer)
+    # Get the image input tensor (not the layer output)
+    image_input_tensor = full_model.input[0]  # First input is image_input
+    output_layer = full_model.get_layer('output').output
+    
+    # Build prediction model from image input to output (skip CTC and label input)
+    prediction_model = tf.keras.Model(
+        inputs=image_input_tensor,
+        outputs=output_layer
+    )
+    return prediction_model
 
 
 def levenshtein(a: str, b: str) -> int:
