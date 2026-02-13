@@ -1,0 +1,12 @@
+Accuracy: 0.8000
+                                          precision    recall  f1-score   support
+
+                 diltiazem hydrochloride       1.00      0.67      0.80         6
+                              gabapentin       0.86      0.86      0.86         7
+hydrocodone bitartrate and acetaminophen       0.83      0.83      0.83         6
+                              lisinopril       0.62      0.83      0.71         6
+                 metformin hydrochloride       0.80      0.80      0.80         5
+
+                                accuracy                           0.80        30
+                               macro avg       0.82      0.80      0.80        30
+                            weighted avg       0.82      0.80      0.80        30
