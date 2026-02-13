@@ -30,8 +30,8 @@ IMG_SIZE = (224, 224)
 OCR_HEIGHT = 32
 OCR_WIDTH = 128  # Fixed width for OCR input
 BATCH_SIZE = 16
-EPOCHS_HEAD = 10
-EPOCHS_FINE = 20
+EPOCHS_HEAD = 25
+EPOCHS_FINE = 0       # Phase 2 disabled — causes catastrophic forgetting
 LEARNING_RATE = 1e-4
 
 # --- CTC stub for loading the CRNN .h5 ---
@@ -140,10 +140,27 @@ def build_fusion_model(ocr_model_path, num_classes):
     from tensorflow.keras.applications import MobileNetV2
 
     # ---- Vision branch ----
-    print("Initializing Vision branch (MobileNetV2 + ImageNet)...")
     vision_input = Input(shape=IMG_SIZE + (3,), name="vision_input")
     backbone = MobileNetV2(weights="imagenet", include_top=False,
                            input_shape=IMG_SIZE + (3,))
+
+    # Try to load fine-tuned vision weights from Keras 3 model
+    VISION_V2_PATH = "models/vision_model_v2.keras"
+    if os.path.exists(VISION_V2_PATH):
+        print(f"Loading fine-tuned vision weights from {VISION_V2_PATH}...")
+        try:
+            pretrained = tf.keras.models.load_model(VISION_V2_PATH)
+            # Copy MobileNetV2 weights from pretrained model
+            pretrained_backbone = pretrained.layers[1]  # backbone layer
+            backbone.set_weights(pretrained_backbone.get_weights())
+            print("  ✅ Fine-tuned vision weights loaded!")
+        except Exception as e:
+            print(f"  ⚠️ Could not load fine-tuned weights: {e}")
+            print("  Using ImageNet weights instead.")
+    else:
+        print("Initializing Vision branch with ImageNet weights (no fine-tuned model found).")
+        print(f"  Tip: Run 'python models/train_v2.py' first for better accuracy.")
+
     x = backbone(vision_input)
     x = GlobalAveragePooling2D()(x)
     x = Dense(128, activation="relu")(x)
@@ -153,8 +170,16 @@ def build_fusion_model(ocr_model_path, num_classes):
     print("Initializing OCR branch (CRNN conv layers)...")
     ocr_input, ocr_features, _ = _build_ocr_branch(ocr_model_path)
 
+    # ---- Confidence Gate (learned) ----
+    # The gate takes OCR features and outputs a scalar [0, 1].
+    # 0 = "OCR has nothing useful, ignore it"
+    # 1 = "OCR is confident, use its features"
+    gate = Dense(64, activation="relu", name="gate_hidden")(ocr_features)
+    gate = Dense(1, activation="sigmoid", name="gate_value")(gate)  # scalar gate
+    gated_ocr = tf.keras.layers.Multiply(name="gated_ocr")([ocr_features, gate])
+
     # ---- Fusion head ----
-    combined = Concatenate()([vision_features, ocr_features])
+    combined = Concatenate()([vision_features, gated_ocr])
     x = Dense(256, activation="relu")(combined)
     x = Dropout(0.4)(x)
     output = Dense(num_classes, activation="softmax", name="fusion_output")(x)
@@ -197,33 +222,55 @@ def train():
     # Phase 1 – freeze backbones, train head only
     for layer in model.layers:
         layer.trainable = False
-    # Unfreeze only the fusion head layers
+    # Unfreeze only the fusion head + gate layers
     model.get_layer("fusion_output").trainable = True
     for layer in model.layers:
-        if "dense" in layer.name or "dropout" in layer.name or "concatenate" in layer.name:
+        if any(k in layer.name for k in ["dense", "dropout", "concatenate", "gate", "multiply", "gated"]):
             layer.trainable = True
 
     model.compile(optimizer=Adam(learning_rate=LEARNING_RATE),
                   loss="categorical_crossentropy", metrics=["accuracy"])
     model.summary()
 
+    # Compute class weights to handle imbalance
+    from sklearn.utils.class_weight import compute_class_weight
+    class_weights = compute_class_weight(
+        "balanced",
+        classes=np.arange(train_gen.num_classes),
+        y=np.array(train_gen.labels)
+    )
+    class_weight_dict = {i: w for i, w in enumerate(class_weights)}
+    logger.info(f"Class weights: { {list(train_gen.class_indices.keys())[i]: round(w,2) for i,w in class_weight_dict.items()} }")
+
     callbacks = [
-        EarlyStopping(monitor="val_loss", patience=3, restore_best_weights=True),
+        EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True),
         ModelCheckpoint(FUSION_MODEL_PATH, monitor="val_accuracy", save_best_only=True),
     ]
 
     logger.info("--- Phase 1: Training Fusion Head (backbones frozen) ---")
     h1 = model.fit(train_gen, validation_data=val_gen,
-                   epochs=EPOCHS_HEAD, callbacks=callbacks)
+                   epochs=EPOCHS_HEAD, callbacks=callbacks,
+                   class_weight=class_weight_dict)
 
-    # Phase 2 – unfreeze everything, low LR
-    logger.info("--- Phase 2: Fine-tuning entire model ---")
-    for layer in model.layers:
-        layer.trainable = True
-    model.compile(optimizer=Adam(learning_rate=LEARNING_RATE / 10),
-                  loss="categorical_crossentropy", metrics=["accuracy"])
-    h2 = model.fit(train_gen, validation_data=val_gen,
-                   epochs=EPOCHS_FINE, callbacks=callbacks)
+    # Phase 2 is DISABLED — it consistently causes catastrophic forgetting
+    # (train accuracy drops 30-40% after unfreezing backbone layers)
+    # If you want to re-enable, set EPOCHS_FINE > 0
+    if EPOCHS_FINE > 0:
+        logger.info("--- Phase 2: Fine-tuning (partial unfreeze) ---")
+        for layer in model.layers:
+            if layer.name == "mobilenetv2_1.00_224":
+                layer.trainable = True
+                for sub_layer in layer.layers[:-30]:
+                    sub_layer.trainable = False
+            elif layer.name == "crnn_conv":
+                layer.trainable = True
+        model.compile(optimizer=Adam(learning_rate=LEARNING_RATE / 100),
+                      loss="categorical_crossentropy", metrics=["accuracy"])
+        h2 = model.fit(train_gen, validation_data=val_gen,
+                       epochs=EPOCHS_FINE, callbacks=callbacks,
+                       class_weight=class_weight_dict)
+    else:
+        logger.info("Phase 2 disabled (EPOCHS_FINE=0). Using Phase 1 weights only.")
 
     logger.info("Training complete.")
 
@@ -231,14 +278,23 @@ def train():
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    plt.figure(figsize=(10, 4))
-    acc     = h1.history["accuracy"]     + h2.history["accuracy"]
-    val_acc = h1.history["val_accuracy"] + h2.history["val_accuracy"]
-    plt.plot(acc, label="Train Acc")
-    plt.plot(val_acc, label="Val Acc")
-    plt.axvline(x=len(h1.history["accuracy"]) - 0.5, ls="--", c="grey", label="Unfreeze")
-    plt.title("Fusion Model Training")
-    plt.xlabel("Epoch"); plt.ylabel("Accuracy"); plt.legend()
+
+    acc     = h1.history["accuracy"]
+    val_acc = h1.history["val_accuracy"]
+    loss    = h1.history["loss"]
+    val_loss = h1.history["val_loss"]
+
+    if EPOCHS_FINE > 0:
+        acc     += h2.history["accuracy"]
+        val_acc += h2.history["val_accuracy"]
+        loss    += h2.history["loss"]
+        val_loss += h2.history["val_loss"]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    ax1.plot(acc, label="Train"); ax1.plot(val_acc, label="Val")
+    ax1.set_title("Accuracy"); ax1.set_xlabel("Epoch"); ax1.legend()
+    ax2.plot(loss, label="Train"); ax2.plot(val_loss, label="Val")
+    ax2.set_title("Loss"); ax2.set_xlabel("Epoch"); ax2.legend()
     plt.tight_layout()
     plt.savefig("plots/fusion_history.png", dpi=150)
     logger.info("Saved plot to plots/fusion_history.png")
