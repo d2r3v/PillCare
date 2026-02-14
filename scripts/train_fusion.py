@@ -229,8 +229,7 @@ def train():
             layer.trainable = True
 
     model.compile(optimizer=Adam(learning_rate=LEARNING_RATE),
-                  loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.03),
-                  metrics=["accuracy"])
+                  loss="categorical_crossentropy", metrics=["accuracy"])
     model.summary()
 
     # Compute class weights to handle imbalance
