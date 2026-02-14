@@ -108,35 +108,37 @@ Fusion:         Concatenate(vision_features, gated_ocr) → Dense(256) → Dropo
 ### Vision-Only Model (MobileNetV2)
 | Metric | Score |
 |--------|-------|
-| Test Accuracy | **82%** |
+| Test Accuracy | **80%** |
 | Macro F1 | 0.83 |
 | Classes | 16 |
 
 ### Fusion Model (Vision + Gated OCR)
 | Metric | Score |
 |--------|-------|
-| Test Accuracy | **81%** |
-| Macro F1 | 0.82 |
+| Test Accuracy | **84%** |
+| Macro F1 | 0.85 |
 | Classes | 16 |
+
+With increased augmentation (200 samples per class), the late-fusion model outperformed the vision-only baseline by +3.6%, demonstrating the benefit of multi-modal integration when sufficient data is available.
 
 #### Per-Class Performance (Fusion)
 | Pill | Precision | Recall | F1 |
 |------|-----------|--------|-----|
-| Amlodipine Besylate | 0.80 | 0.80 | 0.80 |
-| Amoxicillin | 0.67 | 1.00 | 0.80 |
+| Amlodipine Besylate | 0.67 | 0.80 | 0.73 |
+| Amoxicillin | 0.57 | 1.00 | 0.73 |
 | Carvedilol | 1.00 | 1.00 | 1.00 |
-| Diltiazem HCl | 0.80 | 0.57 | 0.67 |
+| Diltiazem HCl | 0.73 | 0.57 | 0.64 |
 | Gabapentin | 1.00 | 0.78 | 0.88 |
-| Hydrochlorothiazide | 0.40 | 0.40 | 0.40 |
-| Hydrocodone/APAP | 0.75 | 1.00 | 0.86 |
+| Hydrochlorothiazide | 0.50 | 0.60 | 0.55 |
+| Hydrocodone/APAP | 0.86 | 1.00 | 0.92 |
 | Levothyroxine Sodium | 0.83 | 1.00 | 0.91 |
-| Lisinopril | 0.75 | 0.50 | 0.60 |
-| Losartan Potassium | 0.83 | 1.00 | 0.91 |
-| Metformin HCl | 0.75 | 0.75 | 0.75 |
+| Lisinopril | 0.88 | 0.58 | 0.70 |
+| Losartan Potassium | 1.00 | 1.00 | 1.00 |
+| Metformin HCl | 1.00 | 0.88 | 0.93 |
 | Metoprolol Tartrate | 0.71 | 1.00 | 0.83 |
 | Pantoprazole Sodium | 0.80 | 1.00 | 0.89 |
 | Prednisone | 1.00 | 1.00 | 1.00 |
-| Simvastatin | 0.92 | 0.92 | 0.92 |
+| Simvastatin | 1.00 | 0.92 | 0.96 |
 | Warfarin Sodium | 0.89 | 1.00 | 0.94 |
 
 ## Getting Started
