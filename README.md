@@ -241,6 +241,57 @@ PillCare/
 - [ ] Develop mobile application with TFLite deployment
 - [ ] Implement real-time inference on mobile devices
 
+## Development Journey & Lessons Learned
+
+This project went through several iterations. Here are the key challenges encountered and how they were resolved:
+
+### 1. Catastrophic Forgetting During Fine-Tuning
+**Problem**: Unfreezing the full MobileNetV2 backbone in Phase 2 caused train accuracy to drop 30-40% immediately, destroying all progress from Phase 1.
+
+**What was tried**:
+- Full unfreeze with low LR (1e-5) — accuracy crashed
+- Partial unfreeze (last 30 layers) with LR 1e-6 — still dropped ~10%
+- Various learning rate schedules
+
+**Solution**: Disabled Phase 2 entirely. With small datasets (<1000 images), training only the fusion head on top of frozen pretrained features is more stable and performant.
+
+### 2. OCR Branch Hurting Instead of Helping
+**Problem**: The fusion model (53%) initially performed *worse* than vision-only (77%). The CRNN text features added noise for pills without readable imprints.
+
+| Approach | Accuracy | Outcome |
+|----------|----------|---------|
+| Vision-only | 77% | Best standalone |
+| Naive fusion (concat) | 53% | OCR noise dominated |
+| Fusion + class weights | 72% | Improved but still behind |
+| Fusion + confidence gating | 68% | Gate added too many params |
+| Fusion + gating + augmentation | **81%** | Finally competitive |
+
+**Key insight**: The confidence gating *concept* was right (learn when to ignore OCR), but it only worked once we had enough data for the gate to learn meaningful patterns. Architecture improvements without data are ineffective.
+
+### 3. Data Quantity > Model Complexity
+**Problem**: Every architecture trick gave diminishing returns. The real bottleneck was always data.
+
+| Change | Impact |
+|--------|--------|
+| Confidence gating | -4% (hurt with small data) |
+| Class weights | +19% (53% → 72%) |
+| Disable Phase 2 | +3% |
+| **Data augmentation (3x)** | **+9%** (biggest single gain) |
+
+**Lesson**: With small datasets, simple approaches (frozen backbone + class weights + more data) consistently outperform complex ones (gating, multi-phase fine-tuning).
+
+### 4. Class Imbalance Kills Minority Classes
+**Problem**: After expanding to 16 classes, 6 drugs had 0% precision/recall — the model simply never predicted them.
+
+**Root cause**: Amoxicillin had 12 training images while diltiazem had 70. The cross-entropy loss optimized for the majority classes.
+
+**Solution**: `sklearn.utils.class_weight.compute_class_weight("balanced")` upweighted rare classes proportionally. Combined with targeted augmentation (generating more images for underrepresented classes), all 16 classes achieved non-zero performance.
+
+### 5. Keras 2 → Keras 3 Migration Pain
+**Problem**: The original vision model (`best_model.h5`) couldn't be loaded in TensorFlow 2.16+ (Keras 3) due to `Sequential` model format changes and the deprecated `.h5` save format.
+
+**Solution**: Rewrote training with the Functional API and `.keras` save format. Pre-trained the vision model separately, then loaded its MobileNetV2 weights into the fusion model.
+
 ## Author Notes
 
 This project explores:
