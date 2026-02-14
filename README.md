@@ -7,7 +7,7 @@
 ### Visual Recognition
 - **Pill recognition** from camera input using MobileNetV2
 - Transfer learning with fine-tuning
-- Predicts among multiple medication classes
+- Predicts among **16 medication classes**
 - Converted to **TensorFlow Lite** for mobile/edge deployment
 
 ### Text Recognition (OCR)
@@ -17,28 +17,42 @@
 - CTC (Connectionist Temporal Classification) loss for sequence learning
 
 ### Fusion Model (Vision + OCR)
-- **Late Fusion** architecture combining MobileNetV2 visual features with CRNN text features
-- Two-phase training: frozen-backbone head training, then full fine-tuning
-- Extracts learned convolutional features from the CRNN (before RNN layers)
-- Achieves **80% test accuracy** with only ImageNet initialization
+- **Gated Fusion** architecture combining MobileNetV2 visual features with CRNN text features
+- Confidence gating mechanism that learns when to trust/ignore OCR features
+- Class-weighted training for imbalanced datasets
+- Achieves **81% test accuracy** across 16 drug classes
 
 ## Tech Stack
 
 | Component | Tool |
 |-----------|------|
 | Deep Learning | TensorFlow / Keras |
-| Model Architectures | MobileNetV2 (visual), CRNN (text), Fusion (combined) |
+| Model Architectures | MobileNetV2 (visual), CRNN (text), Gated Fusion (combined) |
 | Image Preprocessing | OpenCV, NumPy |
 | Text Processing | TensorFlow Text, Regular Expressions |
-| Data Augmentation | TensorFlow Image |
+| Data Augmentation | OpenCV (offline), TensorFlow (online) |
+| Dataset Expansion | openFDA API, ePillID |
 | Model Deployment | TensorFlow Lite |
 
 ## Dataset
 
 ### Visual Recognition Dataset
-- Images extracted from the [Pillbox dataset](https://www.fda.gov/drugs/pillbox)
+- **707 images** across **16 drug classes**, expanded from [ePillID](https://github.com/usuyama/ePillID-benchmark) segmented NIH pill images
+- Augmented offline with rotation, flip, brightness, contrast, perspective, noise, and crop transforms
 - Preprocessed to 224x224 resolution
-- Multiple classes of medications
+- Balanced via class-weighted training + targeted augmentation
+
+#### Supported Drug Classes
+| Drug | Train Images | Drug | Train Images |
+|------|-------------|------|-------------|
+| Diltiazem HCl | 70 | Simvastatin | 50 |
+| Lisinopril | 67 | Gabapentin | 52 |
+| Metformin HCl | 49 | Hydrocodone/APAP | 43 |
+| Warfarin Sodium | 32 | Prednisone | 19 |
+| Hydrochlorothiazide | 19 | Levothyroxine Sodium | 19 |
+| Metoprolol Tartrate | 18 | Amlodipine Besylate | 16 |
+| Losartan Potassium | 16 | Carvedilol | 15 |
+| Pantoprazole Sodium | 15 | Amoxicillin | 12 |
 
 ### OCR Dataset
 - Processed pill images with corresponding text imprints
@@ -79,38 +93,51 @@ Bidirectional(GRU) → Dense → Softmax → CTCLoss
 Vision Branch:  Input(224x224x3) → MobileNetV2 → GAP → Dense(128) → Dropout(0.3)
 OCR Branch:     Input(32x128x1)  → CRNN Conv Layers → GAP → (256-dim features)
                                     ↓
-Fusion:         Concatenate(vision_features, ocr_features) → Dense(256) → Dropout(0.4) → Softmax
+Gate:           OCR features → Dense(64) → Sigmoid → scale OCR features
+                                    ↓
+Fusion:         Concatenate(vision_features, gated_ocr) → Dense(256) → Dropout(0.4) → Softmax
 ```
 
 #### Training Strategy
-- **Phase 1**: Freeze both backbones, train only the fusion head (10 epochs, LR=1e-4)
-- **Phase 2**: Unfreeze all layers, fine-tune end-to-end (20 epochs, LR=1e-5)
+- **Phase 1**: Freeze both backbones, train fusion head + gate (25 epochs, LR=1e-4, class weights)
+- **Phase 2**: Disabled — causes catastrophic forgetting with small datasets
+- Fine-tuned MobileNetV2 weights loaded from separately trained vision model
 
 ## Results
 
-### Visual Recognition (Baseline)
+### Vision-Only Model (MobileNetV2)
 | Metric | Score |
 |--------|-------|
-| Test Accuracy | 90% (TFLite, original model) |
-| Classes | 5 |
+| Test Accuracy | **82%** |
+| Macro F1 | 0.83 |
+| Classes | 16 |
 
-### Fusion Model (Vision + OCR)
+### Fusion Model (Vision + Gated OCR)
 | Metric | Score |
 |--------|-------|
-| Test Accuracy | **80%** |
-| Macro F1 | 0.80 |
-| Classes | 5 |
+| Test Accuracy | **81%** |
+| Macro F1 | 0.82 |
+| Classes | 16 |
 
-#### Per-Class Performance
+#### Per-Class Performance (Fusion)
 | Pill | Precision | Recall | F1 |
-|------|-----------|--------|----|
-| Diltiazem HCl | 1.00 | 0.67 | 0.80 |
-| Gabapentin | 0.86 | 0.86 | 0.86 |
-| Hydrocodone/APAP | 0.83 | 0.83 | 0.83 |
-| Lisinopril | 0.62 | 0.83 | 0.71 |
-| Metformin HCl | 0.80 | 0.80 | 0.80 |
-
-> **Note**: The fusion model currently uses ImageNet-initialized MobileNetV2 weights (the original `best_model.h5` is incompatible with Keras 3). Re-training the vision model in the same environment should push accuracy past 90%.
+|------|-----------|--------|-----|
+| Amlodipine Besylate | 0.80 | 0.80 | 0.80 |
+| Amoxicillin | 0.67 | 1.00 | 0.80 |
+| Carvedilol | 1.00 | 1.00 | 1.00 |
+| Diltiazem HCl | 0.80 | 0.57 | 0.67 |
+| Gabapentin | 1.00 | 0.78 | 0.88 |
+| Hydrochlorothiazide | 0.40 | 0.40 | 0.40 |
+| Hydrocodone/APAP | 0.75 | 1.00 | 0.86 |
+| Levothyroxine Sodium | 0.83 | 1.00 | 0.91 |
+| Lisinopril | 0.75 | 0.50 | 0.60 |
+| Losartan Potassium | 0.83 | 1.00 | 0.91 |
+| Metformin HCl | 0.75 | 0.75 | 0.75 |
+| Metoprolol Tartrate | 0.71 | 1.00 | 0.83 |
+| Pantoprazole Sodium | 0.80 | 1.00 | 0.89 |
+| Prednisone | 1.00 | 1.00 | 1.00 |
+| Simvastatin | 0.92 | 0.92 | 0.92 |
+| Warfarin Sodium | 0.89 | 1.00 | 0.94 |
 
 ## Getting Started
 
@@ -118,14 +145,14 @@ Fusion:         Concatenate(vision_features, ocr_features) → Dense(256) → Dr
 - Python 3.10–3.12
 - TensorFlow 2.16+
 - OpenCV
-- NumPy
+- NumPy, scikit-learn
 - Matplotlib (for visualization)
 - WSL2 recommended for GPU training on Windows
 
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/PillCare.git
+git clone https://github.com/d2r3v/PillCare.git
 cd PillCare
 
 # Install dependencies
@@ -134,9 +161,9 @@ pip install -r requirements.txt
 
 ### Training
 
-#### Vision Model (Baseline)
+#### Vision Model
 ```bash
-python models/train.py
+python models/train_v2.py
 ```
 
 #### OCR Model (CRNN)
@@ -147,6 +174,15 @@ python scripts/train_crnn.py --data_dir=ocr_dataset_epillid --epochs=100 --batch
 #### Fusion Model (Vision + OCR)
 ```bash
 python scripts/train_fusion.py
+```
+
+#### Dataset Expansion
+```bash
+# Expand dataset from ePillID source images
+python scripts/expand_dataset.py
+
+# Offline data augmentation (3-5x more training images)
+python scripts/augment_dataset.py --target 150
 ```
 
 ### Evaluation
@@ -167,34 +203,41 @@ python scripts/run_fusion_pipeline.py --image path_to_pill_image.jpg
 ## Project Structure
 ```
 PillCare/
-├── pill_dataset_split/          # Visual dataset (train/val/test)
+├── pill_dataset_split/          # Visual dataset (train/val/test, 16 classes)
 ├── ocr_dataset_epillid/         # OCR dataset (images + labels)
+├── data/
+│   ├── ePillID_data/            # Source ePillID images
+│   └── label_map.json           # Class index → drug name mapping
 ├── models/
-│   ├── train.py                 # Vision model training
+│   ├── train.py                 # Original vision training (Keras 2)
+│   ├── train_v2.py              # Vision training (Keras 3, class weights)
+│   ├── vision_model_v2.keras    # Trained vision model
 │   ├── crnn_epillid.h5          # Trained CRNN weights
 │   └── fusion_model.h5          # Trained fusion model
 ├── scripts/
-│   ├── train_fusion.py          # Fusion model training
+│   ├── train_fusion.py          # Fusion model training (gated fusion)
 │   ├── train_crnn.py            # CRNN training script
 │   ├── evaluate_fusion.py       # Fusion evaluation
 │   ├── evaluate_baseline.py     # Baseline evaluation
+│   ├── expand_dataset.py        # Dataset expansion via openFDA API
+│   ├── augment_dataset.py       # Offline data augmentation
 │   ├── run_fusion_pipeline.py   # Fusion inference
-│   ├── run_pipeline.py          # Original pipeline
 │   ├── preprocess.py            # Image preprocessing
 │   ├── classify.py              # Vision classification
 │   └── ocr_crnn.py              # OCR prediction
 ├── logs/                        # Training logs & evaluation reports
 ├── plots/                       # Training history plots
-├── best_model.h5                # Original vision model (Keras 2)
 └── README.md
 ```
 
 ## Future Work
 - [x] Combine visual and text recognition for more accurate identification
-- [ ] Re-train vision model in Keras 3 for full weight transfer to fusion
-- [ ] Expand dataset with more pill types and images
-- [ ] Improve OCR accuracy with more training data
-- [ ] Tune fusion hyperparameters (OCR width, architecture, augmentation)
+- [x] Re-train vision model in Keras 3 for full weight transfer to fusion
+- [x] Expand dataset to 16 drug classes (707 images)
+- [x] Implement confidence gating for OCR branch
+- [ ] Further augmentation to 250+ images per class
+- [ ] Late fusion (ensemble) approach for combining models
+- [ ] Improve weakest classes (hydrochlorothiazide, lisinopril)
 - [ ] Develop mobile application with TFLite deployment
 - [ ] Implement real-time inference on mobile devices
 
@@ -203,7 +246,9 @@ PillCare/
 This project explores:
 - Transfer learning for visual recognition
 - Sequence learning with CRNN and CTC loss
-- **Multi-modal fusion** of visual + text features for pill identification
+- **Multi-modal fusion** with confidence gating for pill identification
+- Class-balanced training for imbalanced medical datasets
+- Automated dataset expansion using FDA drug databases
 - Model optimization for edge devices
 
 ## License
