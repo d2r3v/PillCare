@@ -90,7 +90,8 @@ def main():
     # --- Phase 1: Train head ---
     print("\n--- Phase 1: Training head (backbone frozen) ---")
     model.compile(optimizer=Adam(learning_rate=1e-3),
-                  loss="categorical_crossentropy", metrics=["accuracy"])
+                  loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.03),
+                  metrics=["accuracy"])
     model.summary()
 
     # Compute class weights
@@ -115,7 +116,8 @@ def main():
     print(f"  Unfrozen: {num_trainable}/{len(backbone.layers)} backbone layers")
 
     model.compile(optimizer=Adam(learning_rate=1e-5),
-                  loss="categorical_crossentropy", metrics=["accuracy"])
+                  loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.03),
+                  metrics=["accuracy"])
 
     h2 = model.fit(train_gen, validation_data=val_gen,
                    epochs=EPOCHS_FROZEN + EPOCHS_FINETUNE,
