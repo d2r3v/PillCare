@@ -33,7 +33,6 @@ BATCH_SIZE = 16
 EPOCHS_HEAD = 25
 EPOCHS_FINE = 0       # Phase 2 disabled — causes catastrophic forgetting
 LEARNING_RATE = 1e-4
-LABEL_SMOOTHING = 0.1
 
 # --- CTC stub for loading the CRNN .h5 ---
 class CTCLayer(tf.keras.layers.Layer):
@@ -229,16 +228,8 @@ def train():
         if any(k in layer.name for k in ["dense", "dropout", "concatenate", "gate", "multiply", "gated"]):
             layer.trainable = True
 
-    # Cosine decay: LR goes from LEARNING_RATE → 1e-6 over all epochs
-    total_steps = len(train_gen) * EPOCHS_HEAD
-    lr_schedule = tf.keras.optimizers.schedules.CosineDecay(
-        initial_learning_rate=LEARNING_RATE,
-        decay_steps=total_steps,
-        alpha=1e-6 / LEARNING_RATE  # minimum LR ratio
-    )
-    model.compile(optimizer=Adam(learning_rate=lr_schedule),
-                  loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=LABEL_SMOOTHING),
-                  metrics=["accuracy"])
+    model.compile(optimizer=Adam(learning_rate=LEARNING_RATE),
+                  loss="categorical_crossentropy", metrics=["accuracy"])
     model.summary()
 
     # Compute class weights to handle imbalance

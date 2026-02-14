@@ -294,6 +294,11 @@ This project went through several iterations. Here are the key challenges encoun
 
 **Solution**: Rewrote training with the Functional API and `.keras` save format. Pre-trained the vision model separately, then loaded its MobileNetV2 weights into the fusion model.
 
+### 6. Regularization Isn't Always Free
+**Problem**: Label smoothing (0.1) + cosine LR decay reduced test accuracy (fusion 83.78% → 82.88%, vision 80% → 78%).
+
+**Key insight**: With small, noisy datasets, the model benefits more from stronger supervision (hard labels) than softer targets. Label smoothing dilutes the learning signal when every training example counts. Cosine decay reduced the LR too aggressively before the model fully converged. Reverted both changes — the simple constant LR + hard cross-entropy remained the best configuration.
+
 ## Author Notes
 
 This project explores:
