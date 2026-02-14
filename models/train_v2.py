@@ -89,8 +89,13 @@ def main():
 
     # --- Phase 1: Train head ---
     print("\n--- Phase 1: Training head (backbone frozen) ---")
-    model.compile(optimizer=Adam(learning_rate=1e-3),
-                  loss="categorical_crossentropy", metrics=["accuracy"])
+    steps_phase1 = (train_gen.samples // BATCH_SIZE) * EPOCHS_FROZEN
+    lr_schedule_1 = tf.keras.optimizers.schedules.CosineDecay(
+        initial_learning_rate=1e-3, decay_steps=steps_phase1, alpha=1e-5 / 1e-3
+    )
+    model.compile(optimizer=Adam(learning_rate=lr_schedule_1),
+                  loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+                  metrics=["accuracy"])
     model.summary()
 
     # Compute class weights
@@ -114,8 +119,13 @@ def main():
     num_trainable = sum(1 for l in backbone.layers if l.trainable)
     print(f"  Unfrozen: {num_trainable}/{len(backbone.layers)} backbone layers")
 
-    model.compile(optimizer=Adam(learning_rate=1e-5),
-                  loss="categorical_crossentropy", metrics=["accuracy"])
+    steps_phase2 = (train_gen.samples // BATCH_SIZE) * EPOCHS_FINETUNE
+    lr_schedule_2 = tf.keras.optimizers.schedules.CosineDecay(
+        initial_learning_rate=1e-5, decay_steps=steps_phase2, alpha=1e-7 / 1e-5
+    )
+    model.compile(optimizer=Adam(learning_rate=lr_schedule_2),
+                  loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+                  metrics=["accuracy"])
 
     h2 = model.fit(train_gen, validation_data=val_gen,
                    epochs=EPOCHS_FROZEN + EPOCHS_FINETUNE,
