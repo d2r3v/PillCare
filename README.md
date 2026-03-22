@@ -1,26 +1,81 @@
-# PillCare — Intelligent Pill Identifier with Visual and Text Recognition
+# PillCare - Multi-Modal Pill Identification System (Vision + OCR)
 
-**PillCare** is a deep learning-powered application designed to identify pills using both visual appearance (shape, color) and text imprints. It's built for accessibility and safety, especially for elderly users or those managing multiple medications.
+PillCare is a deep learning system that identifies medications from real-world images using **both visual features (shape, color)** and **text imprints**.
 
-## Features
+It is designed for **high-risk scenarios like elderly medication management**, where misidentification can have serious consequences.
 
-### Visual Recognition
-- **Pill recognition** from camera input using MobileNetV2
-- Transfer learning with fine-tuning
-- Predicts among **16 medication classes**
-- Converted to **TensorFlow Lite** for mobile/edge deployment
+---
 
-### Text Recognition (OCR)
-- **CRNN (Convolutional Recurrent Neural Network)** for pill imprint recognition
-- Handles variable-length text sequences
-- Preprocessing pipeline for pill images
-- CTC (Connectionist Temporal Classification) loss for sequence learning
+## Why this project matters
 
-### Fusion Model (Vision + OCR)
-- **Gated Fusion** architecture combining MobileNetV2 visual features with CRNN text features
-- Confidence gating mechanism that learns when to trust/ignore OCR features
-- Class-weighted training for imbalanced datasets
-- Achieves **81% test accuracy** across 16 drug classes
+Most pill identification systems rely on **either image classification or text lookup**, which breaks down in real-world conditions:
+
+- Pills without clear imprints → OCR fails  
+- Visually similar pills → vision models fail  
+- Noisy lighting / angles → both degrade  
+
+**PillCare solves this by combining both modalities**, learning when to trust each signal.
+
+---
+
+## Key Idea
+
+Instead of treating vision and OCR equally, PillCare uses a **gated fusion architecture**:
+
+- Vision model extracts shape/color features  
+- OCR model extracts imprint text  
+- A learned **confidence gate** decides when OCR should influence predictions  
+
+This allows the system to:
+- Ignore OCR when no readable text exists  
+- Use OCR when visual ambiguity is high  
+
+---
+
+## System Overview
+```
+Image Input
+↓
+[Vision Model: MobileNetV2] → visual features
+↓
+[OCR Model: CRNN] → text features
+↓
+[Confidence Gate] → weighs OCR usefulness
+↓
+[Fusion Layer] → final classification
+```
+
+---
+
+## Results
+
+- **Vision-only model**: 80% accuracy  
+- **Fusion model**: 84% accuracy (+3.6%)  
+- **Macro F1**: 0.85 across 16 drug classes  
+
+Key takeaway:
+> Multi-modal fusion improves performance **only when the model learns when to ignore bad signals**
+
+---
+
+## Engineering Highlights
+
+- Built a **multi-stage ML pipeline** (preprocessing → OCR → fusion → inference)
+- Designed a **gated fusion mechanism** to reduce noisy feature influence
+- Implemented **class-weighted training** to handle severe dataset imbalance
+- Optimized models for **edge deployment using TensorFlow Lite**
+- Automated dataset expansion using **openFDA APIs + augmentation pipelines**
+
+---
+
+## Key Lessons
+
+- **Data > architecture**: 3× augmentation gave larger gains than model complexity  
+- **Naive fusion fails**: OCR hurts performance unless selectively gated  
+- **Small datasets require restraint**: freezing backbones outperformed fine-tuning  
+- **Class imbalance can silently break models**  
+
+---
 
 ## Tech Stack
 
